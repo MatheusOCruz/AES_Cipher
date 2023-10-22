@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <unistd.h>
+#include <limits.h>
 /*
  *
  * Implementacao de AES
@@ -9,6 +11,7 @@
  * durante a implementacao deve ser possivel especificar o  numero de rodadas
  * devese implementar a rodadad basica e as manipulacoes especificas das rodadas 0 e n
  */
+#define true 1
 
 typedef uint8_t u8;
 typedef uint32_t u32;
@@ -323,7 +326,7 @@ void AES_encrypt(char *plaintext, u8 *expanded_key, int rounds){
         }
     } // matrix to array
 
-    add_round_key(aes_array, expanded_key + 160);
+    add_round_key(aes_array, expanded_key + 16*rounds);
 
     for (int i = 0; i < 16; ++i)  plaintext[i] = (char)aes_array[i];
 }
@@ -387,16 +390,19 @@ void mix_columns_dec(u8 aes_matrix[4][4]){
 void AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds){
     u8 aes_matrix[4][4];
     u8 aes_array[16];
+    for (int i = 0; i < 16; ++i) {
+        aes_array[i] = ciphertext[i];
+    }
 
-
-    add_round_key(aes_array, expanded_key + 160);
+    add_round_key(aes_array, expanded_key + 16*rounds);
 
     for (int j = 0; j < 4; ++j) {
         for (int k = 0; k < 4; ++k) {
             aes_matrix[k][j] = aes_array[(j * 4) + k];
         }
     } // array to matrix
-
+    for (int i = 0; i < 16; ++i) printf("%02x ", aes_array[i]);
+    printf("\n");
     for (int i = (rounds -1) ; i > 0; i--) {
         shift_rows_dec(aes_matrix);
 
@@ -426,242 +432,110 @@ void AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds){
 
     sub_bytes_dec(aes_array);
     add_round_key(aes_array, expanded_key);
+
+    for (int i = 0; i < 16; ++i) ciphertext[i] = aes_array[i];
 }
 
+void encrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds){
 
-
-void test_reverse_permutation(){
-    u8 round_input[16] ={
-            0x43, 0xf5, 0x26, 0xfb,
-            0x02, 0x9d, 0x8f, 0x85,
-            0xa5, 0x9f, 0x9f, 0x71,
-            0xf3, 0x21, 0x50, 0xd2
-    };
-    u8 round_matrix[4][4];
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            round_matrix[j][i] = round_input[(i*4)+j];
+    FILE *source_file = fopen(source_file_path, "rb");
+    FILE *dest_file = fopen(dest_file_path, "wb");
+    u8 content_buffer[16];
+    while (true){
+        size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
+        if (bytes_read != 16){
+            for (int i = (int)bytes_read-1; i < 16; ++i) {
+                content_buffer[i] = 0;
+            }
         }
-    }
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%02x ", round_matrix[i][j]);
+
+
+        for (int i = 0; i < 16; ++i) {
+            printf("%02x ", content_buffer[i]);
+        }
+        printf("\n");
+
+        AES_encrypt(content_buffer, key, rounds);
+
+        for (int i = 0; i < 16; ++i) {
+            printf("%02x ", content_buffer[i]);
+        }
+        printf("\n");
+
+
+        for (int i = 0; i < 16; ++i) {
+            printf("%c", content_buffer[i]);
+        }
+        printf("\n");
+        for (int i = 0; i < 16; ++i) {
+            content_buffer[i] = content_buffer[i] == 0x00 ? 0x20 : content_buffer[i];
+        }
+        fwrite(content_buffer, 1, 16, dest_file);
+
+        if (feof(source_file)){
+            break;
         }
         printf("\n");
     }
 
-    printf("\n");
-    shift_rows_dec(round_matrix);
+    fclose(source_file);
+    fclose(dest_file);
 
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%02x ", round_matrix[i][j]);
+}
+
+void decrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds){
+    FILE *source_file = fopen(source_file_path, "rb");
+    FILE *dest_file = fopen(dest_file_path, "wb");
+    u8 content_buffer[16];
+    while (true){
+        size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
+        if (bytes_read != 16){
+            for (int i = (int)bytes_read-1; i < 16; ++i) {
+                content_buffer[i] = 0;
+            }
+        }
+
+
+        for (int i = 0; i < 16; ++i) {
+            printf("%02x ", content_buffer[i]);
         }
         printf("\n");
-    }
-} // esse funfa
 
+        AES_decrypt(content_buffer, key, rounds);
 
-
-//  teste pq tava dando errado essa joca
-void test_key_expansion() {
-    u8 initial_key[16] = {1, 2, 3, 4,
-                          5, 6, 7, 8,
-                          9, 10, 11,
-                          12, 13, 14, 15, 16};
-
-    // teste com chave para 10 rounds
-    u8 expanded_key[176];
-    u8 expected[176] = {
-            0x01, 0x02, 0x03, 0x04,
-            0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0a, 0x0b, 0x0c,
-            0x0d, 0x0e, 0x0f, 0x10,
-            0xab, 0x74, 0xc9, 0xd3,
-            0xae, 0x72, 0xce, 0xdb,
-            0xa7, 0x78, 0xc5, 0xd7,
-            0xaa, 0x76, 0xca, 0xc7,
-            0x91, 0x00, 0x0f, 0x7f,
-            0x3f, 0x72, 0xc1, 0xa4,
-            0x98, 0x0a, 0x04, 0x73,
-            0x32, 0x7c, 0xce, 0xb4,
-            0x85, 0x8b, 0x82, 0x5c,
-            0xba, 0xf9, 0x43, 0xf8,
-            0x22, 0xf3, 0x47, 0x8b,
-            0x10, 0x8f, 0x89, 0x3f,
-            0xfe, 0x2c, 0xf7, 0x96,
-            0x44, 0xd5, 0xb4, 0x6e,
-            0x66, 0x26, 0xf3, 0xe5,
-            0x76, 0xa9, 0x7a, 0xda,
-            0x3d, 0xf6, 0xa0, 0xae,
-            0x79, 0x23, 0x14, 0xc0,
-            0x1f, 0x05, 0xe7, 0x25,
-            0x69, 0xac, 0x9d, 0xff,
-            0x8c, 0xa8, 0xb6, 0x57,
-            0xf5, 0x8b, 0xa2, 0x97,
-            0xea, 0x8e, 0x45, 0xb2,
-            0x83, 0x22, 0xd8, 0x4d,
-            0x5f, 0xc9, 0x55, 0xbb,
-            0xaa, 0x42, 0xf7, 0x2c,
-            0x40, 0xcc, 0xb2, 0x9e,
-            0xc3, 0xee, 0x6a, 0xd3,
-            0xf7, 0xcb, 0x33, 0x95,
-            0x5d, 0x89, 0xc4, 0xb9,
-            0x1d, 0x45, 0x76, 0x27,
-            0xde, 0xab, 0x1c, 0xf4,
-            0x8e, 0x57, 0x8c, 0x88,
-            0xd3, 0xde, 0x48, 0x31,
-            0xce, 0x9b, 0x3e, 0x16,
-            0x10, 0x30, 0x22, 0xe2,
-            0xbc, 0xc4, 0x14, 0x42,
-            0x6f, 0x1a, 0x5c, 0x73,
-            0xa1, 0x81, 0x62, 0x65,
-            0xb1, 0xb1, 0x40, 0x87
-    };
-    int igual = 1;
-    expand_key(initial_key, expanded_key, 10);
-    for (int i = 0; i < 44; ++i) {
-
-        for (int j = 0; j < 4; ++j) {
-            if(expanded_key[i*4 + j] != expected[i*4 + j]) igual = 0;
-
+        for (int i = 0; i < 16; ++i) {
+            printf("%02x ", content_buffer[i]);
         }
-
-    }
-    printf("%d", igual);
-
-    //ao que tudo indica a chave n ta errada n
-
-}    // esse passou
-
-void test_sub_bytes(){
-    u8 round_key[16] = {0xab,0x74,0xc9,0xd3,
-                        0xae,0x72,0xce,0xdb,
-                        0xa7,0x78,0xc5,0xd7,
-                        0xaa,0x76,0xca,0xc7};
-
-    u8 round_input[16]= {0x64, 0x77, 0x23, 0x63,
-                         0x6a, 0x75, 0x73, 0x67,
-                         0x29, 0x6e, 0x6e, 0x2c,
-                         0x7e, 0x7b, 0x6c, 0x7f
-
-    };
-    sub_bytes(round_input);
+        printf("\n");
 
 
-    for (int i = 0; i < 16; ++i) {
-        printf("%02x ", round_input[i]);
-    }
-    printf("\n");
-
-}   // esse tmb
-
-void test_permutation(){
-
-    u8 round_input[16] ={
-            0x43, 0xf5, 0x26, 0xfb,
-            0x02, 0x9d, 0x8f, 0x85,
-            0xa5, 0x9f, 0x9f, 0x71,
-            0xf3, 0x21, 0x50, 0xd2
-    };
-    u8 round_matrix[4][4];
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            round_matrix[j][i] = round_input[(i*4)+j];
+        for (int i = 0; i < 16; ++i) {
+            printf("%c", content_buffer[i]);
         }
-    }
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%02x ", round_matrix[i][j]);
+        printf("\n");
+        for (int i = 0; i < 16; ++i) {
+            content_buffer[i] = content_buffer[i] == 0x00 ? 0x20 : content_buffer[i];
+        }
+        fwrite(content_buffer, 1, 16, dest_file);
+
+        if (feof(source_file)){
+            break;
         }
         printf("\n");
     }
 
-    printf("\n");
-    shift_rows(round_matrix);
+    fclose(source_file);
+    fclose(dest_file);
 
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%02x ", round_matrix[i][j]);
-        }
-        printf("\n");
-    }
-
-} // fazendo assim funciona
-
-void test_mix_col(){
-    u8 round_input[16] = {
-            0x43, 0x9d, 0x9f, 0xd2,
-            0x02, 0x9f, 0x50, 0xfb,
-            0xa5, 0x21, 0x26, 0x85,
-            0xf3, 0xf5, 0x8f, 0x71
-    };
-    u8 round_matrix[4][4];
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            round_matrix[j][i] = round_input[(i*4)+j];
-        }
-    }
-
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%02x ", round_matrix[i][j]);
-        }
-        printf("\n");
-    }
-
-    printf("\n");
-    mix_columns(round_matrix);
-
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            printf("%02x ", round_matrix[i][j]);
-        }
-        printf("\n");
-    }
-    for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            round_input[4*i + j] = round_matrix[j][i];
-        }
-    }
-
-    for (int i = 0; i < 16; ++i) {
-        if (i%4 == 0) printf(" ");
-        printf("%02x", round_input[i]);
-    }
-
-}   // agr foi
-
-void test_mix_key(){
-    u8 round_key[16] = {0xab,0x74,0xc9,0xd3,
-                        0xae,0x72,0xce,0xdb,
-                        0xa7,0x78,0xc5,0xd7,
-                        0xaa,0x76,0xca,0xc7};
-
-    u8 round_input[16] = {
-            0x77, 0x0a, 0x96, 0x78,
-            0x15, 0x2c, 0x2b, 0x24,
-            0x91, 0x08, 0x5c, 0xe2,
-            0x07, 0xf9, 0x90, 0x96
-    };
-    add_round_key(round_input, round_key);
-    for (int i = 0; i < 16; ++i) {
-        printf("%02x ", round_input[i]);
-    }
-
-}  // esse funfa
+}
 
 
 int main() {
 
-    u8 plaintext[16], cyphertext[16],key[16];
-
     int rounds = 10;
-
 
     u8 expanded_key[16*(rounds+1)];
 
-    char *teste = "eu gosto de suco de fruta ";
     u8 chave_teste[16] = {
             1,2,3,4,
             5,6,7,8,
@@ -669,32 +543,13 @@ int main() {
             13,14,15,16
     };
 
-
     expand_key(chave_teste, expanded_key,rounds);
 
 
+    char *arquivo_teste = "/home/matheus/CLionProjects/AES_encryption/texto_teste.txt";
+    char * t2 =  "/home/matheus/CLionProjects/AES_encryption/texto_teste_cripto.txt";
 
 
-    int len = strlen(teste);
-    int len_with_pad = len;
-    if (len_with_pad % 16 != 0) len_with_pad = (len_with_pad/16 + 1) * 16;
-    char padded_msg[len_with_pad+1];
-    strcpy(padded_msg, teste);
-// Preenche o restante com 'i' (ou qualquer outro caractere).
-    for (int i = len; i < len_with_pad; ++i) {
-        padded_msg[i] = 0;
-    }
-
-    for (int i = 0; i < len_with_pad ; ++i) {
-        //printf("%02x ",padded_msg[i]);
-    }
-    for (int i = 0; i < (len_with_pad/16); ++i) {
-        AES_encrypt(padded_msg + (16*i), expanded_key, rounds);
-    }
-    for (int i = 0; i < (len_with_pad/16); ++i) {
-        AES_decrypt(padded_msg + (16*i), expanded_key, rounds);
-
-    }
 
 
     return 0;
