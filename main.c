@@ -232,6 +232,12 @@ void expand_key(u8 *base_key, u8 *expanded_key, int rounds){
 
 }
 
+void add_round_key(u8 *aes_matrix, u8 *round_key){
+    for (int i = 0; i < 16; ++i) {
+        aes_matrix[i] ^= round_key[i]; //xor com a chave
+    }
+}
+
 
 //   criptografa o trem
 
@@ -274,62 +280,8 @@ void mix_columns(u8 aes_matrix[4][4]){
 
 }
 
-void add_round_key(u8 *aes_matrix, u8 *round_key){
-    for (int i = 0; i < 16; ++i) {
-        aes_matrix[i] ^= round_key[i]; //xor com a chave
-    }
-}
 
-void AES_encrypt(char *plaintext, u8 *expanded_key, int rounds){
-    u8 aes_matrix[4][4];
-    u8 aes_array[16];
 
-    for (int i = 0; i < 16; ++i) aes_array[i] = plaintext[i];
-
-    add_round_key(aes_array, expanded_key);
-
-    for (int i = 0; i < rounds - 1; ++i) {
-        sub_bytes(aes_array);
-
-        for (int j = 0; j < 4; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                aes_matrix[k][j] = aes_array[(j * 4) + k];
-            }
-        } // array to matrix
-
-        shift_rows(aes_matrix);
-        mix_columns(aes_matrix);  // ate aqui ta certo
-
-        for (int j = 0; j < 4; ++j) {
-            for (int k = 0; k < 4; ++k) {
-                aes_array[(j * 4) + k] = aes_matrix[k][j];
-            }
-        } // matrix to array
-
-        add_round_key(aes_array, expanded_key + (16 * (i + 1))); //na teoria ta funfando tmb
-
-    }  // rounds
-
-    sub_bytes(aes_array);
-
-    for (int j = 0; j < 4; ++j) {
-        for (int k = 0; k < 4; ++k) {
-            aes_matrix[k][j] = aes_array[(j * 4) + k];
-        }
-    } // array to matrix
-
-    shift_rows(aes_matrix);
-
-    for (int j = 0; j < 4; ++j) {
-        for (int k = 0; k < 4; ++k) {
-            aes_array[(j * 4) + k] = aes_matrix[k][j];
-        }
-    } // matrix to array
-
-    add_round_key(aes_array, expanded_key + 16*rounds);
-
-    for (int i = 0; i < 16; ++i)  plaintext[i] = (char)aes_array[i];
-}
 
 
 //descriptografa o treco
@@ -387,6 +339,60 @@ void mix_columns_dec(u8 aes_matrix[4][4]){
     }
 }
 
+
+
+
+void AES_encrypt(char *plaintext, u8 *expanded_key, int rounds){
+    u8 aes_matrix[4][4];
+    u8 aes_array[16];
+
+    for (int i = 0; i < 16; ++i) aes_array[i] = plaintext[i];
+
+    add_round_key(aes_array, expanded_key);
+
+    for (int i = 0; i < rounds - 1; ++i) {
+        sub_bytes(aes_array);
+
+        for (int j = 0; j < 4; ++j) {
+            for (int k = 0; k < 4; ++k) {
+                aes_matrix[k][j] = aes_array[(j * 4) + k];
+            }
+        } // array to matrix
+
+        shift_rows(aes_matrix);
+        mix_columns(aes_matrix);  // ate aqui ta certo
+
+        for (int j = 0; j < 4; ++j) {
+            for (int k = 0; k < 4; ++k) {
+                aes_array[(j * 4) + k] = aes_matrix[k][j];
+            }
+        } // matrix to array
+
+        add_round_key(aes_array, expanded_key + (16 * (i + 1))); //na teoria ta funfando tmb
+
+    }  // rounds
+
+    sub_bytes(aes_array);
+
+    for (int j = 0; j < 4; ++j) {
+        for (int k = 0; k < 4; ++k) {
+            aes_matrix[k][j] = aes_array[(j * 4) + k];
+        }
+    } // array to matrix
+
+    shift_rows(aes_matrix);
+
+    for (int j = 0; j < 4; ++j) {
+        for (int k = 0; k < 4; ++k) {
+            aes_array[(j * 4) + k] = aes_matrix[k][j];
+        }
+    } // matrix to array
+
+    add_round_key(aes_array, expanded_key + 16*rounds);
+
+    for (int i = 0; i < 16; ++i)  plaintext[i] = (char)aes_array[i];
+}
+
 void AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds){
     u8 aes_matrix[4][4];
     u8 aes_array[16];
@@ -436,94 +442,124 @@ void AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds){
     for (int i = 0; i < 16; ++i) ciphertext[i] = aes_array[i];
 }
 
-void encrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds){
+
+void CTR_AES_encrypt(char *plaintext, u8 *expanded_key, int rounds, u8* init_vector, int counter){
+    u8 full_vec[16];
+    // na teoria salva do jeito certo
+    for (int i = 0; i < 12; ++i) {
+        full_vec[i] = init_vector[i];
+    }
+    for (int i = 15; i > 11; i--) {
+        full_vec[i] = (u8)(counter & 0xFF); // Copia o byte menos significativo do contador
+        counter >>= 8; // Desloca o contador para a direita em 8 bits
+    }
+
+    AES_encrypt(full_vec, expanded_key, rounds);
+    for (int i = 0; i < 16; ++i) {
+        plaintext[i] ^=full_vec[i];
+    }
+
+}
+
+void CTR_AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds, u8* init_vector, int counter){
+    u8 full_vec[16];
+    // na teoria salva do jeito certo
+    for (int i = 0; i < 12; ++i) {
+        full_vec[i] = init_vector[i];
+    }
+    for (int i = 15; i > 11; i--) {
+        full_vec[i] = (u8)(counter & 0xFF); // Copia o byte menos significativo do contador
+        counter >>= 8; // Desloca o contador para a direita em 8 bits
+    }
+
+    AES_encrypt(full_vec, expanded_key, rounds);
+    for (int i = 0; i < 16; ++i) {
+        ciphertext[i] ^=full_vec[i];
+    }
+}
+
+// como diabos eu vou fazer o treco de G(2^128) n sei ! eeeeee
+void GMAC_encrypt(u8* ciphertext, u8* key, u8* MAC){}
+
+void GMAC_verify(){}
+
+void encrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds, u8* init_vector){
 
     FILE *source_file = fopen(source_file_path, "rb");
     FILE *dest_file = fopen(dest_file_path, "wb");
     u8 content_buffer[16];
+    int counter = 0;
+    int quantos_bytes = 0;
+    //gera primeiro mac
+    u8* tag[16];
+    u8 init_gcm[16] = {0};
+
+    for (int i = 0; i < 12; ++i) {
+        init_gcm[i] = init_vector[i];
+    }
+    GMAC_encrypt(init_gcm, key, init_gcm);
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
+        quantos_bytes += bytes_read;
         if (bytes_read != 16){
-            for (int i = (int)bytes_read-1; i < 16; ++i) {
+            for (int i = (int)bytes_read; i < 16; ++i) {
                 content_buffer[i] = 0;
             }
         }
 
+        CTR_AES_encrypt(content_buffer, key, rounds, init_vector, counter++);;
+        GMAC_encrypt(content_buffer, key, tag);
 
-        for (int i = 0; i < 16; ++i) {
-            printf("%02x ", content_buffer[i]);
-        }
-        printf("\n");
-
-        AES_encrypt(content_buffer, key, rounds);
-
-        for (int i = 0; i < 16; ++i) {
-            printf("%02x ", content_buffer[i]);
-        }
-        printf("\n");
-
-
-        for (int i = 0; i < 16; ++i) {
-            printf("%c", content_buffer[i]);
-        }
-        printf("\n");
         for (int i = 0; i < 16; ++i) {
             content_buffer[i] = content_buffer[i] == 0x00 ? 0x20 : content_buffer[i];
         }
         fwrite(content_buffer, 1, 16, dest_file);
 
         if (feof(source_file)){
+            fwrite(init_vector, 1, 12, dest_file);
             break;
         }
         printf("\n");
     }
-
+    printf("%d", quantos_bytes);
     fclose(source_file);
     fclose(dest_file);
 
 }
 
 void decrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds){
+
     FILE *source_file = fopen(source_file_path, "rb");
     FILE *dest_file = fopen(dest_file_path, "wb");
+
     u8 content_buffer[16];
+    u8 init_vector[12];
+    // vai para os ultimos 12 bytes do arquivo onde fica o vetor
+    fseek(source_file, -12, SEEK_END);
+    fread(init_vector, 1, sizeof (init_vector), source_file);
+    //volta para o comeco do arquivo
+    fseek(source_file, 0, SEEK_SET);
+
+    int counter = 0;
+    int total_bytes = 0;
+
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
-        if (bytes_read != 16){
-            for (int i = (int)bytes_read-1; i < 16; ++i) {
-                content_buffer[i] = 0;
-            }
-        }
+
+        if (bytes_read != 16) break; // se for menos de 16 e pq =leu os 12 do vetor
+
+        total_bytes += bytes_read;
 
 
-        for (int i = 0; i < 16; ++i) {
-            printf("%02x ", content_buffer[i]);
-        }
-        printf("\n");
+        CTR_AES_decrypt(content_buffer, key, rounds, init_vector, counter++);
 
-        AES_decrypt(content_buffer, key, rounds);
-
-        for (int i = 0; i < 16; ++i) {
-            printf("%02x ", content_buffer[i]);
-        }
-        printf("\n");
-
-
-        for (int i = 0; i < 16; ++i) {
-            printf("%c", content_buffer[i]);
-        }
-        printf("\n");
         for (int i = 0; i < 16; ++i) {
             content_buffer[i] = content_buffer[i] == 0x00 ? 0x20 : content_buffer[i];
         }
         fwrite(content_buffer, 1, 16, dest_file);
-
-        if (feof(source_file)){
-            break;
-        }
-        printf("\n");
+        if (feof(source_file)) break;
     }
-
+    printf("%d",total_bytes);
     fclose(source_file);
     fclose(dest_file);
 
@@ -536,6 +572,8 @@ int main() {
 
     u8 expanded_key[16*(rounds+1)];
 
+    char teste[16] = "eu gosto de suco";
+
     u8 chave_teste[16] = {
             1,2,3,4,
             5,6,7,8,
@@ -543,14 +581,34 @@ int main() {
             13,14,15,16
     };
 
+    // chave tem 128 -> nonce tem 96 + do counter == 128
+    u8 init_vector_teste[12] = {
+            1,2,3,4,
+            5,6,7,8,
+            9,10,11,12,
+    };
+
     expand_key(chave_teste, expanded_key,rounds);
+
 
 
     char *arquivo_teste = "/home/matheus/CLionProjects/AES_encryption/texto_teste.txt";
     char * t2 =  "/home/matheus/CLionProjects/AES_encryption/texto_teste_cripto.txt";
 
-
-
+    //encrypt_file(arquivo_teste, t2, expanded_key, rounds, init_vector_teste);
+    decrypt_file(t2, arquivo_teste, expanded_key, rounds);
 
     return 0;
 }
+
+/*
+ *  for (int i = 0; i < 16; ++i) {
+            printf("%02x ", content_buffer[i]);
+        }
+        printf("\n");
+
+
+        for (int i = 0; i < 16; ++i) {
+            printf("%c", content_buffer[i]);
+        }
+ */
