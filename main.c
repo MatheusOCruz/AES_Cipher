@@ -769,10 +769,13 @@ void GMAC_encrypt_file_test(char* source_file_path, char* dest_file_path, int ro
     FILE *dest_file = fopen(dest_file_path, "wb");
     u8 content_buffer[16] = {0};
     int quantos_bytes = 0;
-
+    u64 len_c = 0;
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
-        quantos_bytes += bytes_read;
+        len_c += bytes_read * 8;
+        // pro teste de tudo 0
+        len_c += 16*8;
+
         if (bytes_read != 16){
             for (int i = (int)bytes_read; i < 16; ++i) {
                 content_buffer[i] = 0;
@@ -806,6 +809,21 @@ void GMAC_encrypt_file_test(char* source_file_path, char* dest_file_path, int ro
 
         printf("\n");
     }
+    //    while acaba aqui ze tatu
+    u8 lena_lenc[16] = {0};  // como n tem a (ainda) e 0
+    for (int i = 15; i > 11; --i) {
+        lena_lenc[i] = (u8)(len_c & 0xff);
+        len_c >>=8;
+    }
+    printf("lenA||lenC:");
+    for (int i = 0; i < 16; ++i) {
+        printf("%02x", lena_lenc[i]);
+        tag[i] ^= lena_lenc[i];
+    }
+    printf("\n");
+    GF_128(tag, h, tag);
+
+
     //len c -> total do aqruivo por enquanto n tem A
     // tem q botar o xor len(a)||len(c) mul
     // tag xor esse trem
@@ -817,7 +835,7 @@ void GMAC_encrypt_file_test(char* source_file_path, char* dest_file_path, int ro
     //agr e a tag de vdd na teoria
     printf("     tag:");
     for (int i = 0; i < 16; ++i) {
-        printf("%02x", y0[i]);
+        printf("%02x", tag[i]);
     }
     printf("\n");
     //fwrite(tag, 1, 16, dest_file);
