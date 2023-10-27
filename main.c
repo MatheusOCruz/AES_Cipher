@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <inttypes.h>
-#include <openssl/evp.h>
+
 /*
  *
  * Implementacao de AES
@@ -562,8 +562,7 @@ void GMAC_encrypt_file(char* source_file_path, char* dest_file_path, u8* key, in
             }
         }
 
-        CTR_AES_encrypt(content_buffer, key, rounds, init_vector, counter++);;
-
+        CTR_AES_encrypt(content_buffer, key, rounds, init_vector, counter++);
         for (int i = 0; i < 16; ++i) {
             tag[i] ^= content_buffer[i];
         }
@@ -602,9 +601,6 @@ void GMAC_encrypt_file(char* source_file_path, char* dest_file_path, u8* key, in
 // pode retornar o plaintext caso esteja correto
 // caso a verificacao falhe retorna um FAIL
 void GMAC_verify(u8* ciphertext, u8* key, u8* mac_iv, u8* aad, u8* tag){}
-
-
-
 
 
 void encrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds){
@@ -734,9 +730,8 @@ void GMAC_encrypt_file_test(char* source_file_path, char* dest_file_path, int ro
     //iv_gen(init_vector);
     u8 tag[16] ={0};
     u8 y0[16] = {0}; //usado no final do treco
-    for (int i = 0; i < 12; ++i) {
-        y0[i] = init_vector[i];
-    }
+
+
     y0[15] = 1;
     u8 h[16] ={0}; // usado na mult
     //GF_128(auth_data, h, tag);
@@ -847,6 +842,85 @@ void GMAC_encrypt_file_test(char* source_file_path, char* dest_file_path, int ro
     fclose(dest_file);
 }
 
+void GMAC_verify_test(){
+    u8 ciphertext[16] = {
+            0x03, 0x88, 0xda, 0xce,
+            0x60, 0xb6, 0xa3, 0x92,
+            0xf3, 0x28, 0xc2, 0xb9,
+            0x71, 0xb2, 0xfe, 0x78
+    };
+    u8 expected_tag[16] = {
+            0xab, 0x6e, 0x47, 0xd4,
+            0x2c, 0xec, 0x13, 0xbd,
+            0xf5, 0x3a, 0x67, 0xb2,
+            0x12, 0x57, 0xbd, 0xdf
+    };
+    int rounds = 10;
+    u8 key[16] = {0};
+    u8 expanded_key[16*(rounds+1)];
+
+    expand_key(key, expanded_key, rounds);
+
+    u8 auth_data[16] = {0}; //por enquanto n tem esse trem
+    u8 init_vector[12] = {0};
+
+    //iv_gen(init_vector);
+
+    u8 tag[16] ={0};
+    u8 y0[16] = {0}; //usado no final do treco
+
+    y0[15] = 1;
+    u8 h[16] ={0}; // usado na mult
+
+
+
+    for (int i = 0; i < 12; ++i)  y0[i] = init_vector[i];
+
+    int counter = 2;
+
+    AES_encrypt(h, expanded_key, rounds);
+    AES_encrypt(y0, expanded_key, rounds);
+
+    GF_128(auth_data, h, tag);
+
+    u64 len_c = 16*8;
+
+    for (int i = 0; i < 16; ++i) {
+        tag[i] ^= ciphertext[i];
+    }
+    CTR_AES_decrypt(ciphertext, expanded_key, rounds, init_vector, counter++);
+    GF_128(tag, h, tag);
+
+    u8 lena_lenc[16] = {0};  // como n tem a (ainda) e 0
+    for (int i = 15; i > 11; --i) {
+        lena_lenc[i] = (u8)(len_c & 0xff);
+        len_c >>=8;
+    }
+    for (int i = 0; i < 16; ++i) {
+        tag[i] ^= lena_lenc[i];
+    }
+    GF_128(tag, h, tag);
+
+
+    for (int i = 0; i < 16; ++i) {
+        tag[i] ^= y0[i];
+    }
+    int flag = 1;
+    for (int i = 0; i < 16; ++i) {
+        if (tag[i] != expected_tag[i]) flag = 0;
+    }
+    if (flag) printf("deu bom");
+    else printf("deu ruim");
+
+
+
+
+
+    //dps
+
+
+}
+
 int main() {
 
     int rounds = 10;
@@ -875,9 +949,9 @@ int main() {
     char *arquivo_teste = "/home/matheus/CLionProjects/AES_encryption/texto_teste.txt";
     char * t2 =  "/home/matheus/CLionProjects/AES_encryption/texto_teste_cripto.txt";
 
-    GMAC_encrypt_file_test(arquivo_teste, t2,  rounds);
+    //GMAC_encrypt_file_test(arquivo_teste, t2,  rounds);
     //printf("Valor restaurado: 0x%" PRIX64 "%016" PRIX64 "\n", (uint64_t)(JJ >> 64), (uint64_t)JJ);
-
+    GMAC_verify_test();
 
 
     //encrypt_file(arquivo_teste, t2, expanded_key, rounds);
