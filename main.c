@@ -609,26 +609,15 @@ void GMAC_encrypt_file(char* source_file_path, char* dest_file_path, u8* expande
 // caso a verificacao falhe retorna um FAIL
 void GMAC_verify(char* source_file_path, char* dest_file_path, u8* expanded_key, int rounds){
     u8 auth_data[16] = {0}; // n tem auth
-
     u8 init_vector[12];
-
     u8 tag[16] = {0};
     u8 y0[16] = {0};
-
-
-
     int counter = 2;
-
-
     u8 h[16] ={0}; // usado na mult
-
     u8 expected_tag[16];
     printf("Y0:");
     for (int i = 0; i < 16; ++i) printf("%02x", y0[i]);
     printf("\n");
-
-
-    AES_encrypt(h, expanded_key, rounds); // inicia H = E(K,0)
 
 
     GF_128(auth_data,h, tag); // inicia tag (nesse caso hx0 = 0)
@@ -656,7 +645,7 @@ void GMAC_verify(char* source_file_path, char* dest_file_path, u8* expanded_key,
     y0[15] = 1;
 
     AES_encrypt(y0, expanded_key, rounds);// y0 = E(K,Y0)
-
+    AES_encrypt(h, expanded_key, rounds); // inicia H = E(K,0)
     printf("ex Tag:");
     for (int i = 0; i < 16; ++i) {
         printf("%02x", expected_tag[i]);
@@ -666,7 +655,6 @@ void GMAC_verify(char* source_file_path, char* dest_file_path, u8* expanded_key,
     u8 content_buffer[16];
     u64 len_c = 0;
     len_c = tamanho * 8;
-
 
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
@@ -681,25 +669,16 @@ void GMAC_verify(char* source_file_path, char* dest_file_path, u8* expanded_key,
             tag[i] ^= content_buffer[i];
         } // atualiza tag = tag xor cipher
         GF_128(tag, h, tag); //mulh
-        printf("C:");
-        for (int i = 0; i < 16; ++i) {
-            printf("%02x",content_buffer[i]);
-        }
-        printf("\n");
 
 
         CTR_AES_decrypt(content_buffer, expanded_key, rounds, init_vector, counter++);
 
         printf("P:");
-        for (int i = 0; i < 16; ++i) {
-            printf("%02x",content_buffer[i]);
-        }
-        printf("\n");
+        for (int i = 0; i < 16; ++i) content_buffer[i] = content_buffer[i] == 0 ? 0x20 : content_buffer[i];
 
 
 
-
-        fwrite(content_buffer, 1, 16, dest_file);
+        fwrite(content_buffer, 1, sizeof(content_buffer), dest_file);
 
         if (tamanho == 0) break;
     }
