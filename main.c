@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <inttypes.h>
+#include <jpeglib.h>
 
 /*
  *
@@ -182,14 +183,14 @@ static const u8 mul14[256] = {0x00,0x0e,0x1c,0x12,0x38,0x36,0x24,0x2a,0x70,0x7e,
                               0xec,0xe2,0xf0,0xfe,0xd4,0xda,0xc8,0xc6,0x9c,0x92,0x80,0x8e,0xa4,0xaa,0xb8,0xb6,
                               0x0c,0x02,0x10,0x1e,0x34,0x3a,0x28,0x26,0x7c,0x72,0x60,0x6e,0x44,0x4a,0x58,0x56,
                               0x37,0x39,0x2b,0x25,0x0f,0x01,0x13,0x1d,0x47,0x49,0x5b,0x55,0x7f,0x71,0x63,0x6d,
-                              0xd7,0xd9,0xcb,0xc5,0xef,0xe1,0xf3,0xfd,0xa7,0xa9,0xbb,0xb5,0x9f,0x91,0x83,0x8d};
+                              0xd7,0xd9,0xcb,0xc5,0xef,0xe1,0xf3,0xfd,0xa7,0xa9,0xbb,0xb5,0x9f,0x91,0x83,0x8d
+};
 
 static const u8 mix[4][4] = {
         {2,3,1,1},
         {1,2,3,1},
         {1,1,2,3,},
         {3,1,1,2}
-
 };
 
 static const u8 mix_dec[4][4] = {
@@ -197,14 +198,13 @@ static const u8 mix_dec[4][4] = {
         {9,14,11,13},
         {13,9,14,11},
         {11,13,9,14}
-
 };
 
 //    gerador da chabe
 
 void expand_key_core(u8 *in, u8 current_round){
-    u32 *q = (u32 *) in; //como esse trem e ponteiro ele muda o in ja
-    *q = (*q >> 8) | (*q  << 24); // essa joca fica ao contrario na memoria (indiano grandao)
+    u32 *q = (u32 *) in;
+    *q = (*q >> 8) | (*q  << 24);
     for (int i = 0; i < 4; ++i) {
         in[i] = s_box[in[i]];
     }
@@ -230,10 +230,7 @@ void expand_key(u8 *base_key, u8 *expanded_key, int rounds){
             expanded_key[bytes_gen] = expanded_key[bytes_gen - 16] ^ temp[i];
             bytes_gen++;
         }
-
-
     }
-
 }
 
 void add_round_key(u8 *state, u8 *round_key){
@@ -284,20 +281,16 @@ void mix_columns(u8 aes_matrix[4][4]){
 
 }
 
-
-
-
-
 //descriptografa o treco
 
 void shift_rows_dec(u8 aes_matrix[4][4]){
     u8 temp_row[4];
-    for (int i = 1; i < 4; ++i) { // Comece da segunda linha (índice 1) e vá até a última (índice 3).
+    for (int i = 1; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
-            temp_row[(j + i) % 4] = aes_matrix[i][j]; // Realize o deslocamento  para a direita.
+            temp_row[(j + i) % 4] = aes_matrix[i][j];
         }
         for (int j = 0; j < 4; ++j) {
-            aes_matrix[i][j] = temp_row[j]; // salva novo valor
+            aes_matrix[i][j] = temp_row[j];
         }
     }
 }
@@ -383,31 +376,23 @@ void AES_encrypt(char *plaintext, u8 *expanded_key, int rounds){
 void AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds){
     u8 aes_matrix[4][4];
     u8 aes_array[16];
-    for (int i = 0; i < 16; ++i) {
-        aes_array[i] = ciphertext[i];
-    }
-
+    for (int i = 0; i < 16; ++i) aes_array[i] = ciphertext[i];
     add_round_key(aes_array, expanded_key + 16*rounds);
-
     for (int j = 0; j < 4; ++j) {
         for (int k = 0; k < 4; ++k) {
             aes_matrix[k][j] = aes_array[(j * 4) + k];
         }
     } // array to matrix
-    for (int i = 0; i < 16; ++i) printf("%02x ", aes_array[i]);
-    printf("\n");
+
     for (int i = (rounds -1) ; i > 0; i--) {
         shift_rows_dec(aes_matrix);
-
         for (int j = 0; j < 4; ++j) {
             for (int k = 0; k < 4; ++k) {
                 aes_array[(j * 4) + k] = aes_matrix[k][j];
             }
         } // matrix to array
-
         sub_bytes_dec(aes_array);
         add_round_key(aes_array, expanded_key +  (16 * i));
-
         for (int j = 0; j < 4; ++j) {
             for (int k = 0; k < 4; ++k) {
                 aes_matrix[k][j] = aes_array[(j * 4) + k];
@@ -415,58 +400,47 @@ void AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds){
         } // array to matrix
         mix_columns_dec(aes_matrix);
     }
-
     shift_rows_dec(aes_matrix);
     for (int j = 0; j < 4; ++j) {
         for (int k = 0; k < 4; ++k) {
             aes_array[(j * 4) + k] = aes_matrix[k][j];
         }
     } // matrix to array
-
     sub_bytes_dec(aes_array);
     add_round_key(aes_array, expanded_key);
-
     for (int i = 0; i < 16; ++i) ciphertext[i] = aes_array[i];
 }
 
 
 void CTR_AES_encrypt(char *plaintext, u8 *expanded_key, int rounds, u8* init_vector, int counter){
     u8 full_vec[16];
-    // na teoria salva do jeito certo
-    for (int i = 0; i < 12; ++i) {
-        full_vec[i] = init_vector[i];
-    }
+    for (int i = 0; i < 12; ++i) full_vec[i] = init_vector[i];
     for (int i = 15; i > 11; i--) {
-        full_vec[i] = (u8)(counter & 0xFF); // Copia o byte menos significativo do contador
-        counter >>= 8; // Desloca o contador para a direita em 8 bits
+        full_vec[i] = (u8)(counter & 0xFF);
+        counter >>= 8;
     }
-
     AES_encrypt(full_vec, expanded_key, rounds);
-
     for (int i = 0; i < 16; ++i) {
         plaintext[i] ^=full_vec[i];
     }
-
 }
 
 void CTR_AES_decrypt(char *ciphertext, u8 *expanded_key, int rounds, u8* init_vector, int counter){
     u8 full_vec[16];
-    // na teoria salva do jeito certo
     for (int i = 0; i < 12; ++i) {
         full_vec[i] = init_vector[i];
     }
     for (int i = 15; i > 11; i--) {
-        full_vec[i] = (u8)(counter & 0xFF); // Copia o byte menos significativo do contador
-        counter >>= 8; // Desloca o contador para a direita em 8 bits
+        full_vec[i] = (u8)(counter & 0xFF);
+        counter >>= 8;
     }
-
     AES_encrypt(full_vec, expanded_key, rounds);
     for (int i = 0; i < 16; ++i) {
         ciphertext[i] ^=full_vec[i];
     }
 }
 
-// magia negra sovietica
+
 void GF_128(const u8* x, const u8* Y, u8* result){
     u128 Z, V = 0,y = 0,mask, r;
     Z = 0;
@@ -478,8 +452,10 @@ void GF_128(const u8* x, const u8* Y, u8* result){
     for (int i = 0; i < 16; i++) {
         y |= (u128) Y[i] << (8 * (15 - i));
     }
+
     r = 0;
     r |= (u128)0xe1<<120;
+
     for (int i = 127; i >=0 ; --i) {
         mask = ((u128)1)<<i;
         u8 bit_y = (y & mask)? 1 : 0;
@@ -505,7 +481,6 @@ void GF_128(const u8* x, const u8* Y, u8* result){
 void iv_gen(u8* iv_vec){
     srand(time(NULL));
     for (int i = 0; i < 12; ++i) iv_vec[i] = rand() % 256;
-
 }
 
 // para as etapas intermediarias (tirando o inicial e o final)
@@ -513,45 +488,27 @@ void iv_gen(u8* iv_vec){
 
 // n tem header no txt, ent n vai ter auth
 // arquivo ->  iv || ciphertext || tag
+
 void GMAC_encrypt_file(char* source_file_path, char* dest_file_path, u8* expanded_key, int rounds){
     int counter = 2;
-
-    u8 auth_data[16] = {0}; // n tem auth
-
+    u8 auth_data[16] = {0};
     u8 init_vector[12];
     iv_gen(init_vector);
-
-    printf("V:");
-    for (int i = 0; i < 12; ++i) {
-        printf("%02x", init_vector[i]);
-    }
-    printf("\n");
-
     u8 tag[16];
-    //inicia Y0
-    u8 y0[16] = {0}; //usado no final do treco
+    u8 y0[16] = {0};
     for (int i = 0; i <12 ; ++i) y0[i] = init_vector[i];
     y0[15] = 1;
-
     u8 h[16] ={0}; // usado na mult
-
-
-
     AES_encrypt(h, expanded_key, rounds); // inicia H = E(K,0)
     AES_encrypt(y0, expanded_key, rounds);// y0 = E(K,Y0)
-
     GF_128(auth_data,h, tag); // inicia tag (nesse caso hx0 = 0)
-
     FILE *source_file = fopen(source_file_path, "rb");
     FILE *dest_file = fopen(dest_file_path, "wb");
-
     u8 content_buffer[16];
     u64 len_c = 0;
     fwrite(init_vector, 1, 12, dest_file);
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
-
-
         if (bytes_read != 16){
             if(bytes_read == 0) break;
             for (int i = (int)bytes_read; i < 16; ++i) {
@@ -559,107 +516,53 @@ void GMAC_encrypt_file(char* source_file_path, char* dest_file_path, u8* expande
             }
         }
         len_c += 128; // a cada iteracao + 16 * 8
-
-        printf("P:");
-        for (int i = 0; i < 16; ++i) printf("%02x", content_buffer[i]);
-        printf("\n");
-
         CTR_AES_encrypt(content_buffer, expanded_key, rounds, init_vector, counter++);
-
-
-        printf("C:");
-        for (int i = 0; i < 16; ++i) printf("%02x", content_buffer[i]);
-        printf("\n");
-
         for (int i = 0; i < 16; ++i) {
             tag[i] ^= content_buffer[i];
         } // atualiza tag = tag xor cipher
-
-        GF_128(tag, h, tag); //mulh
-
+        GF_128(tag, h, tag);
         fwrite(content_buffer, 1, 16, dest_file);
-
         if (feof(source_file)) break;
-
     }
-    u8 lena_lenc[16] = {0};  // como n tem a (ainda) e 0
+    u8 lena_lenc[16] = {0};
     for (int i = 15; i > 11; --i) {
         lena_lenc[i] = (u8)(len_c & 0xff);
         len_c >>=8;
     }
     for (int i = 0; i < 16; ++i) tag[i] ^= lena_lenc[i]; // tag xor len A || len C
-
     GF_128(tag, h, tag); //  ultimo Mul H
-
     for (int i = 0; i < 16; ++i) tag[i] ^= y0[i]; // tag = tag xor Y0
-
-    //agr e a tag de vdd na teoria
-    printf("T:");
-    for (int i = 0; i < 16; ++i) printf("%02x", tag[i]);
-    printf("\n");
     fwrite(tag, 1, 16, dest_file);
-
-
     fclose(source_file);
     fclose(dest_file);
 }
 
-
-// pode retornar o plaintext caso esteja correto
-// caso a verificacao falhe retorna um FAIL
 void GMAC_verify(char* source_file_path, char* dest_file_path, u8* expanded_key, int rounds){
     u8 auth_data[16] = {0}; // n tem auth
     u8 init_vector[12];
     u8 tag[16] = {0};
     u8 y0[16] = {0};
     int counter = 2;
-    u8 h[16] ={0}; // usado na mult
+    u8 h[16] ={0};
     u8 expected_tag[16];
-    printf("Y0:");
-    for (int i = 0; i < 16; ++i) printf("%02x", y0[i]);
-    printf("\n");
-
-
-    GF_128(auth_data,h, tag); // inicia tag (nesse caso hx0 = 0)
-
+    GF_128(auth_data,h, tag);
     FILE *source_file = fopen(source_file_path, "rb");
     FILE *dest_file = fopen(dest_file_path, "wb");
-
     fseek(source_file, -16, SEEK_END);
     int tamanho = ftell(source_file) - 12;
-    printf("%d\n",tamanho);
-
     fread(expected_tag, 1, sizeof(expected_tag), source_file);
-    //volta para o comeco do arquivo
     fseek(source_file, 0, SEEK_SET);
-
     fread(init_vector, 1, sizeof(init_vector), source_file);
-
-    printf("V:");
-    for (int i = 0; i < 12; ++i) {
-        printf("%02x", init_vector[i]);
-    }
-    printf("\n");
-
     for (int i = 0; i <12 ; ++i) y0[i] = init_vector[i];
     y0[15] = 1;
-
     AES_encrypt(y0, expanded_key, rounds);// y0 = E(K,Y0)
-    AES_encrypt(h, expanded_key, rounds); // inicia H = E(K,0)
-    printf("ex Tag:");
-    for (int i = 0; i < 16; ++i) {
-        printf("%02x", expected_tag[i]);
-    }
-    printf("\n");
-
+    AES_encrypt(h, expanded_key, rounds); // H = E(K,0)
     u8 content_buffer[16];
     u64 len_c = 0;
     len_c = tamanho * 8;
-
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
         tamanho -=16;
-
         if (bytes_read != 16){
             for (int i = (int)bytes_read; i < 16; ++i) {
                 content_buffer[i] = 0;
@@ -669,37 +572,19 @@ void GMAC_verify(char* source_file_path, char* dest_file_path, u8* expanded_key,
             tag[i] ^= content_buffer[i];
         } // atualiza tag = tag xor cipher
         GF_128(tag, h, tag); //mulh
-
-
         CTR_AES_decrypt(content_buffer, expanded_key, rounds, init_vector, counter++);
-
-        printf("P:");
         for (int i = 0; i < 16; ++i) content_buffer[i] = content_buffer[i] == 0 ? 0x20 : content_buffer[i];
-
-
-
         fwrite(content_buffer, 1, sizeof(content_buffer), dest_file);
-
-        if (tamanho == 0) break;
+        if (tamanho <= 0) break;
     }
-    u8 lena_lenc[16] = {0};  // como n tem a (ainda) e 0
+    u8 lena_lenc[16] = {0};
     for (int i = 15; i > 11; --i) {
         lena_lenc[i] = (u8)(len_c & 0xff);
         len_c >>=8;
     }
     for (int i = 0; i < 16; ++i) tag[i] ^= lena_lenc[i]; // tag xor len A || len C
-
-    GF_128(tag, h, tag); //  ultimo Mul H
-
+    GF_128(tag, h, tag);
     for (int i = 0; i < 16; ++i) tag[i] ^= y0[i]; // tag = tag xor Y0
-
-    printf("T:");
-    for (int i = 0; i < 16; ++i) {
-        printf("%02x",tag[i]);
-    }
-    printf("\n");
-    //agr e a tag de vdd na teoria
-
     int flag = 1;
     for (int i = 0; i < 16; ++i) {
         if (tag[i] != expected_tag[i]) flag = 0;
@@ -711,13 +596,8 @@ void GMAC_verify(char* source_file_path, char* dest_file_path, u8* expanded_key,
         printf("Falha de autenticacao\n");
         remove(dest_file_path);
     }
-    else printf("deu bom\n");
-
 }
-
-
-
-
+// usa modo ctr
 void encrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds){
     u8 init_vector[12];
     iv_gen(init_vector);
@@ -726,7 +606,6 @@ void encrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rou
     u8 content_buffer[16];
     int counter = 0;
     int quantos_bytes = 0;
-
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
         quantos_bytes += bytes_read;
@@ -735,26 +614,20 @@ void encrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rou
                 content_buffer[i] = 0;
             }
         }
-
         CTR_AES_encrypt(content_buffer, key, rounds, init_vector, counter++);;
-
         for (int i = 0; i < 16; ++i) {
             content_buffer[i] = content_buffer[i] == 0x00 ? 0x20 : content_buffer[i];
         }
         fwrite(content_buffer, 1, 16, dest_file);
-
         if (feof(source_file)){
             fwrite(init_vector, 1, 12, dest_file);
             break;
         }
-        printf("\n");
     }
-    printf("%d", quantos_bytes);
     fclose(source_file);
     fclose(dest_file);
-
 }
-
+//usa modo ctr
 void decrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rounds){
 
     FILE *source_file = fopen(source_file_path, "rb");
@@ -774,7 +647,7 @@ void decrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rou
     while (true){
         size_t bytes_read = fread(content_buffer, 1, sizeof(content_buffer), source_file);
 
-        if (bytes_read != 16) break; // se for menos de 16 e pq =leu os 12 do vetor
+        if (bytes_read != 16) break;
 
         total_bytes += bytes_read;
 
@@ -787,7 +660,6 @@ void decrypt_file(char* source_file_path, char* dest_file_path, u8* key, int rou
         fwrite(content_buffer, 1, 16, dest_file);
         if (feof(source_file)) break;
     }
-    printf("%d",total_bytes);
     fclose(source_file);
     fclose(dest_file);
 
@@ -1030,13 +902,8 @@ void GMAC_verify_test(){
 
 
 int main() {
-
-    int rounds = 10;
-
-    u8 expanded_key[16*(rounds+1)];
-
-    char teste[16] = "eu gosto de suco";
-
+    int rounds;
+    scanf("%d", &rounds);
     u8 chave_teste[16] = {
             1,2,3,4,
             5,6,7,8,
@@ -1044,59 +911,14 @@ int main() {
             13,14,15,16
     };
 
-    // chave tem 128 -> nonce tem 96 + do counter == 128
-    u8 init_vector_teste[12] = {
-            1,2,3,4,
-            5,6,7,8,
-            9,10,11,12,
-    };
+    u8 expanded_key[16*(rounds+1)];
+
     expand_key(chave_teste, expanded_key,rounds);
 
+    //GMAC_encrypt_file(path_origem, path_dest, expanded_key, rounds);
+    //GMAC_verify(path_origem, path_dest, expanded_key, rounds);
 
-
-    char *arquivo_teste = "/home/matheus/CLionProjects/AES_encryption/texto_teste.txt";
-    char * t2 =  "/home/matheus/CLionProjects/AES_encryption/texto_teste_cripto.txt";
-
-    // ta salvando direito
-    /*
-    FILE* f = fopen(t2, "rb");
-    u8 testea[12],teste2[16];
-    fread(testea, 1, 12,f);
-    printf("V:");
-    for (int i = 0; i < 12; ++i) {
-        printf("%02x",testea[i]);
-    }
-    printf("\n");
-    fread(teste2,1,16,f);
-    printf("C:");
-    for (int i = 0; i < 16; ++i) {
-        printf("%02x",teste2[i]);
-    }
-    printf("\n");
-    fread(teste2,1,16,f);
-    printf("Tag:");
-    for (int i = 0; i < 16; ++i) {
-        printf("%02x",teste2[i]);
-    }
-    printf("\n");
-     */
-
-    //GMAC_encrypt_file_test();
-    //printf("Valor restaurado: 0x%" PRIX64 "%016" PRIX64 "\n", (uint64_t)(JJ >> 64), (uint64_t)JJ);
-    //GMAC_verify_test();
-
-
-    //GMAC_encrypt_file(arquivo_teste, t2, expanded_key, rounds);
-    GMAC_verify(t2, arquivo_teste, expanded_key, rounds);
-
-    //encrypt_file(arquivo_teste, t2, expanded_key, rounds);
-    //decrypt_file(t2, arquivo_teste, expanded_key, rounds);
-    //testeaa(JJ);
-
-     // Exemplo de valor de 128 bits
-
+    //encrypt_file(path_origem, path_dest, expanded_key, rounds);
+    //decrypt_file(path_origem, path_dest, expanded_key, rounds);
     return 0;
 }
-
-/*
- */
