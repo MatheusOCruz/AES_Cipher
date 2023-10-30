@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <inttypes.h>
-#include <jpeglib.h>
+#include <unistd.h>
 
 /*
  *
@@ -902,6 +902,7 @@ void GMAC_verify_test(){
 
 
 int main() {
+    printf("quantidade de rounds: ");
     int rounds;
     scanf("%d", &rounds);
     u8 chave_teste[16] = {
@@ -910,10 +911,37 @@ int main() {
             9,10,11,12,
             13,14,15,16
     };
-
     u8 expanded_key[16*(rounds+1)];
-
     expand_key(chave_teste, expanded_key,rounds);
+    int opcao;
+    printf("1 - criptografar arquivo como modo CTR\n2 - decifrar arquivo com modo CTR\n"
+           "3 - criptografar arquivo como modo GCM\n4 - decifrar arquivo com modo GCM\n");
+    scanf("%d", &opcao);
+
+
+
+    //muda pro path dos arquivos
+    char* plaintext_path = "C:\\Users\\Matheus\\CLionProjects\\AES_Cipher\\texto_teste.txt";
+    char* ciphertext_path = "C:\\Users\\Matheus\\CLionProjects\\AES_Cipher\\texto_teste_enc.txt";
+
+
+    switch (opcao) {
+        case 1:
+            encrypt_file(plaintext_path, ciphertext_path, expanded_key, rounds);
+            break;
+        case 2:
+            decrypt_file(ciphertext_path, plaintext_path, expanded_key, rounds);
+            break;
+        case 3:
+            GMAC_encrypt_file(plaintext_path, ciphertext_path, expanded_key, rounds);
+            break;
+        case 4:
+            GMAC_verify(ciphertext_path, plaintext_path, expanded_key, rounds);
+            break;
+        default:
+            break;
+    }
+
 
     //GMAC_encrypt_file(path_origem, path_dest, expanded_key, rounds);
     //GMAC_verify(path_origem, path_dest, expanded_key, rounds);
